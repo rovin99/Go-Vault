@@ -3,27 +3,55 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"sync"
+	"net/url"
+	
+
 )
 
 func main() {
-	args := os.Args[1:] // Get the command-line arguments, excluding the program name
+    args := os.Args[1:]
+    if len(args) != 3 {
+        fmt.Println("usage: ./crawler URL maxConcurrency maxPages")
+        os.Exit(1)
+    }
 
-	if len(args) < 1 {
-		fmt.Println("no website provided")
-		os.Exit(1)
-	} else if len(args) > 1 {
-		fmt.Println("too many arguments provided")
-		os.Exit(1)
-	} else {
-		baseURL := args[0]
-		fmt.Printf("starting crawl of: %s\n", baseURL)
+    baseURL, err := url.Parse(args[0])
+    if err != nil {
+        fmt.Printf("invalid base URL: %v\n", err)
+        os.Exit(1)
+    }
 
-		pages := make(map[string]int)
-		crawlPage(baseURL, baseURL, pages)
+    maxConcurrency, err := strconv.Atoi(args[1])
+    if err != nil || maxConcurrency <= 0 {
+        fmt.Println("invalid maxConcurrency value")
+        os.Exit(1)
+    }
 
-		fmt.Println("Crawled pages:")
-		for page, count := range pages {
-			fmt.Printf("%s: %d\n", page, count)
-		}
-	}
-}
+    maxPages, err := strconv.Atoi(args[2])
+    if err != nil || maxPages <= 0 {
+        fmt.Println("invalid maxPages value")
+        os.Exit(1)
+    }
+
+    cfg := &config{
+        pages:              make(map[string]int),
+        baseURL:            baseURL,
+        mu:                 &sync.Mutex{},
+        concurrencyControl: make(chan struct{}, maxConcurrency),
+        wg:                 &sync.WaitGroup{},
+        maxPages:           maxPages,
+    }
+
+    fmt.Printf("starting crawl of: %s\n", args[0])
+    cfg.wg.Add(1)
+    cfg.concurrencyControl <- struct{}{}
+    go cfg.crawlPage(args[0])
+    cfg.wg.Wait()
+
+    fmt.Println("Crawled pages:")
+    for page, count := range cfg.pages {
+        fmt.Printf("%s: %d\n", page, count)
+    }
+} 
