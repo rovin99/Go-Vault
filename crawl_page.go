@@ -42,11 +42,6 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
         return
     }
 
-    if cfg.baseURL.Host != currentURL.Host {
-        fmt.Printf("Skipping URL from different domain: %s\n", rawCurrentURL)
-        return
-    }
-
     normalizedURL := NormalizeURL(rawCurrentURL)
     if !cfg.addPageVisit(normalizedURL) {
         fmt.Printf("Already visited: %s\n", normalizedURL)
@@ -67,8 +62,15 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
         return
     }
 
+    internalCount, externalCount := 0, 0
     for _, u := range urls {
         normalizedU := NormalizeURL(u)
+        if cfg.baseURL.Host == currentURL.Host {
+            internalCount++
+        } else {
+            externalCount++
+        }
+
         cfg.mu.Lock()
         if _, found := cfg.pages[normalizedU]; found || len(cfg.pages) >= cfg.maxPages {
             cfg.mu.Unlock()
@@ -81,4 +83,6 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
         cfg.concurrencyControl <- struct{}{}
         go cfg.crawlPage(u)
     }
+
+    fmt.Printf("Found %d internal and %d external links on %s\n", internalCount, externalCount, rawCurrentURL)
 }
