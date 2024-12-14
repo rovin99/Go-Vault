@@ -36,14 +36,6 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
         <-cfg.concurrencyControl
     }()
 
-    cfg.mu.Lock()
-    if len(cfg.pages) >= cfg.maxPages {
-        cfg.mu.Unlock()
-        fmt.Println("Reached max pages limit, stopping crawl.")
-        return
-    }
-    cfg.mu.Unlock()
-
     currentURL, err := url.Parse(rawCurrentURL)
     if err != nil {
         fmt.Printf("invalid current URL: %v\n", err)
@@ -56,16 +48,10 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
     }
 
     normalizedURL := NormalizeURL(rawCurrentURL)
-    fmt.Printf("Normalized URL: %s\n", normalizedURL)
-
-    cfg.mu.Lock()
-    if _, found := cfg.pages[normalizedURL]; found {
-        cfg.mu.Unlock()
+    if !cfg.addPageVisit(normalizedURL) {
         fmt.Printf("Already visited: %s\n", normalizedURL)
         return
     }
-    cfg.pages[normalizedURL] = 1
-    cfg.mu.Unlock()
 
     html, err := getHTML(rawCurrentURL)
     if err != nil {
@@ -81,25 +67,14 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
         return
     }
 
-    cfg.mu.Lock()
-    if len(cfg.pages) >= cfg.maxPages {
-        cfg.mu.Unlock()
-        fmt.Println("Reached max pages limit during URL extraction, stopping further crawls.")
-        return
-    }
-    cfg.mu.Unlock()
-
     for _, u := range urls {
+        normalizedU := NormalizeURL(u)
         cfg.mu.Lock()
-        if _, found := cfg.pages[NormalizeURL(u)]; found {
+        if _, found := cfg.pages[normalizedU]; found || len(cfg.pages) >= cfg.maxPages {
             cfg.mu.Unlock()
             continue
         }
-        if len(cfg.pages) >= cfg.maxPages {
-            cfg.mu.Unlock()
-            fmt.Println("Reached max pages limit during URL iteration, stopping further crawls.")
-            break
-        }
+        cfg.pages[normalizedU] = 0 // Mark as visited
         cfg.mu.Unlock()
 
         cfg.wg.Add(1)
