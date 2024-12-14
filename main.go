@@ -17,5 +17,13 @@ func main() {
 	} else {
 		baseURL := args[0]
 		fmt.Printf("starting crawl of: %s\n", baseURL)
+
+		pages := make(map[string]int)
+		crawlPage(baseURL, baseURL, pages)
+
+		fmt.Println("Crawled pages:")
+		for page, count := range pages {
+			fmt.Printf("%s: %d\n", page, count)
+		}
 	}
 }
